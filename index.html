@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MathPaper Studio · 数学组卷工坊</title>
+<meta name="description" content="浏览器里的数学试卷排版工坊：题库管理、LaTeX 实时渲染、智能组卷、一键打印成 PDF。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f6ef7'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='Georgia,serif' font-style='italic'%3E%E2%88%91%3C/text%3E%3C/svg%3E">
+<!-- KaTeX：数学公式渲染。加载失败时应用自动降级为纯文本模式 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-theme="light">
+
+<!-- ══════════ 顶栏 ══════════ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-logo">∑</span>
+    <div class="brand-text">
+      <strong>数学组卷工坊</strong>
+      <small>MathPaper Studio</small>
+    </div>
+  </div>
+
+  <div class="paper-switcher">
+    <select id="paper-select" title="切换试卷"></select>
+    <button id="btn-paper-new" class="btn-icon" title="新建试卷">＋</button>
+    <button id="btn-paper-rename" class="btn-icon" title="重命名 / 编辑卷面信息">✎</button>
+    <button id="btn-paper-dup" class="btn-icon" title="复制当前试卷">⧉</button>
+    <button id="btn-paper-del" class="btn-icon btn-danger" title="删除当前试卷">🗑</button>
+  </div>
+
+  <div class="topbar-actions">
+    <div class="view-tabs" role="tablist">
+      <button id="tab-paper" class="tab active" role="tab">📝 组卷</button>
+      <button id="tab-bank" class="tab" role="tab">🗂 题库</button>
+    </div>
+    <button id="btn-random" class="btn" title="按条件从题库随机抽题">🎲 随机抽题</button>
+    <button id="btn-print" class="btn btn-primary" title="打印 / 导出 PDF">🖨 打印</button>
+    <div class="dropdown">
+      <button id="btn-export-menu" class="btn">⋯ 更多</button>
+      <div class="dropdown-panel hidden" id="menu-export">
+        <button data-act="export-package">📦 导出整包 JSON（题库+试卷）</button>
+        <button data-act="export-paper">📄 导出当前试卷 JSON</button>
+        <button data-act="export-md">📝 导出当前试卷 Markdown</button>
+        <button data-act="import-json">📥 导入 JSON</button>
+        <button data-act="load-sample">🎁 载入示例数据</button>
+        <button data-act="wipe-all" class="danger">⚠ 清空全部数据</button>
+      </div>
+    </div>
+    <button id="btn-theme" class="btn-icon" title="深色 / 浅色主题">🌙</button>
+  </div>
+</header>
+
+<!-- ══════════ 主体 ══════════ -->
+<main class="layout">
+
+  <!-- ── 侧栏 ── -->
+  <aside class="sidebar" id="sidebar">
+    <!-- 组卷视图：卷面统计 -->
+    <div class="side-card" id="panel-paper-stats">
+      <h3>卷面统计</h3>
+      <div class="score-line">
+        <span class="score-big"><b id="stat-total">0</b><small> / <span id="stat-target">150</span> 分</small></span>
+      </div>
+      <div class="progress"><div class="progress-fill" id="stat-progress"></div></div>
+      <p class="side-hint" id="stat-diff"></p>
+      <div class="stat-block">
+        <h4>题型分布</h4>
+        <div id="stat-types" class="stat-rows"></div>
+      </div>
+      <div class="stat-block">
+        <h4>难度分布</h4>
+        <div class="diff-bar" id="stat-diffbar">
+          <span class="diff-easy" title="容易"></span>
+          <span class="diff-mid" title="中等"></span>
+          <span class="diff-hard" title="较难"></span>
+        </div>
+        <div class="diff-legend"><i class="dot dot-easy"></i>易 <i class="dot dot-mid"></i>中 <i class="dot dot-hard"></i>难</div>
+      </div>
+      <label class="check-line"><input type="checkbox" id="opt-student-fields" checked> 卷首学生信息栏</label>
+      <label class="check-line"><input type="checkbox" id="opt-answer-page"> 卷末附答案页（不含解析）</label>
+      <label class="check-line"><input type="checkbox" id="opt-option-cols2" checked> 选择题选项双栏排布</label>
+    </div>
+
+    <!-- 题库视图：筛选 -->
+    <div class="side-card hidden" id="panel-bank-filter">
+      <h3>筛选题目</h3>
+      <input type="search" id="filter-q" placeholder="🔍 搜索题干 / 答案 / 来源">
+      <label class="field-label">题型</label>
+      <select id="filter-type">
+        <option value="">全部</option>
+        <option value="choice">选择题</option>
+        <option value="blank">填空题</option>
+        <option value="solve">解答题</option>
+        <option value="custom">其他</option>
+      </select>
+      <label class="field-label">难度</label>
+      <select id="filter-diff">
+        <option value="">全部</option>
+        <option value="1">容易</option>
+        <option value="2">中等</option>
+        <option value="3">较难</option>
+      </select>
+      <label class="field-label">知识点标签</label>
+      <select id="filter-tag"><option value="">全部</option></select>
+      <p class="side-hint" id="bank-count"></p>
+    </div>
+  </aside>
+
+  <!-- ── 内容区 ── -->
+  <section class="content" id="content">
+
+    <!-- 组卷视图：所见即所得 A4 纸 -->
+    <div id="view-paper" class="view">
+      <div class="paper-scroll">
+        <div class="paper-sheet" id="paper-sheet">
+          <!-- 由 paper.js 渲染 -->
+        </div>
+        <div class="paper-toolbar">
+          <button id="btn-add-from-bank" class="btn btn-primary">＋ 从题库选题</button>
+          <button id="btn-add-new" class="btn">＋ 新写题目</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 题库视图 -->
+    <div id="view-bank" class="view hidden">
+      <div class="bank-head">
+        <h2>题库 <span id="bank-total-badge" class="badge"></span></h2>
+        <button id="btn-bank-new" class="btn btn-primary">＋ 新建题目</button>
+      </div>
+      <div id="bank-list" class="bank-list">
+        <!-- 由 bank.js 渲染 -->
+      </div>
+      <div id="bank-empty" class="empty hidden">
+        <p>题库还是空的。</p>
+        <button class="btn btn-primary" data-act="load-sample">🎁 载入示例题目看看效果</button>
+        <button class="btn" id="btn-bank-new2">＋ 新建题目</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ══════════ 题目编辑器抽屉 ══════════ -->
+<div class="drawer-mask hidden" id="drawer-mask"></div>
+<aside class="drawer hidden" id="editor-drawer">
+  <header class="drawer-head">
+    <h3 id="editor-title">编辑题目</h3>
+    <button class="btn-icon" id="btn-editor-close">✕</button>
+  </header>
+
+  <div class="drawer-body">
+    <div class="editor-grid">
+      <label>题型
+        <select id="ed-type">
+          <option value="choice">选择题</option>
+          <option value="blank">填空题</option>
+          <option value="solve">解答题</option>
+          <option value="custom">其他</option>
+        </select>
+      </label>
+      <label>难度
+        <select id="ed-diff">
+          <option value="1">容易</option>
+          <option value="2" selected>中等</option>
+          <option value="3">较难</option>
+        </select>
+      </label>
+      <label>分值
+        <input type="number" id="ed-score" min="0" step="1" value="5">
+      </label>
+      <label>来源
+        <input type="text" id="ed-source" placeholder="如：2026 秋季期中（可留空）">
+      </label>
+    </div>
+
+    <label class="field-label">知识点标签（逗号分隔）</label>
+    <input type="text" id="ed-tags" list="tag-list" placeholder="如：三角函数, 解三角形">
+    <datalist id="tag-list"></datalist>
+
+    <div class="md-toolbar" id="symbol-toolbar"><!-- toolbar.js 渲染 --></div>
+
+    <label class="field-label">题干（支持 Markdown 与 LaTeX：$行内$ 与 $$独立$$）</label>
+    <textarea id="ed-stem" rows="4" placeholder="已知函数 $f(x)=\sin 2x + \sqrt{3}\cos 2x$，则 $f(x)$ 的最小正周期为＿＿。"></textarea>
+    <div class="preview" id="ed-stem-preview"></div>
+    <p class="latex-error hidden" id="ed-stem-error"></p>
+
+    <div id="ed-options-wrap">
+      <label class="field-label">选项</label>
+      <div id="ed-options"></div>
+      <div class="option-actions">
+        <button class="btn btn-sm" id="btn-opt-add">＋ 加一个选项</button>
+        <button class="btn btn-sm" id="btn-opt-del">－ 减一个选项</button>
+      </div>
+    </div>
+
+    <label class="field-label">答案（打印时可单独成页）</label>
+    <textarea id="ed-answer" rows="2" placeholder="选择题可直接写 C；填空写最终结果；解答题写关键结论"></textarea>
+    <div class="preview" id="ed-answer-preview"></div>
+
+    <label class="field-label">解析（仅屏幕查看，不打印）</label>
+    <textarea id="ed-analysis" rows="3" placeholder="解题思路与步骤（可选）"></textarea>
+    <div class="preview" id="ed-analysis-preview"></div>
+  </div>
+
+  <footer class="drawer-foot">
+    <button class="btn btn-danger" id="btn-editor-delete">删除</button>
+    <span class="flex-sp"></span>
+    <button class="btn" id="btn-editor-cancel">取消</button>
+    <button class="btn btn-primary" id="btn-editor-save">保存</button>
+  </footer>
+</aside>
+
+<!-- ══════════ 模态框 ══════════ -->
+<div class="modal-mask hidden" id="modal-mask">
+  <div class="modal" id="modal-box"><!-- app.js 填充 --></div>
+</div>
+
+<div id="toast-root"></div>
+<input type="file" id="file-input" accept=".json" class="hidden">
+
+<footer class="app-foot">MathPaper Studio · 数据保存在本机浏览器 localStorage，不上传服务器 · <a href="https://github.com/wu-jianwen/math-paper-studio" target="_blank" rel="noopener">GitHub</a></footer>
+
+<!-- 零构建：普通 script 按依赖顺序加载，双击 index.html 即可使用 -->
+<script src="js/md-lite.js"></script>
+<script src="js/katex-render.js"></script>
+<script src="js/store.js"></script>
+<script src="js/toolbar.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/dnd.js"></script>
+<script src="js/paper.js"></script>
+<script src="js/bank.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
